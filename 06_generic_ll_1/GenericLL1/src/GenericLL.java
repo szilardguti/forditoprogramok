@@ -9,7 +9,7 @@ import java.util.*;
 // Ezután egy-egy sorban a sor elején álló nemterminálisra vonatkozó szabály-jobboldalak szóközzel elválasztva
 
 
-public class LL1egyszeruTablazattal {
+public class GenericLL {
 
         public static class SzamozottJobboldal {
             private String l;
@@ -53,8 +53,9 @@ public class LL1egyszeruTablazattal {
     public static TreeMap<String,ArrayList<String>> grammar = new TreeMap<>();
     public static TreeMap<String,ArrayList<SzamozottJobboldal>> szamozottGrammar = new TreeMap<>();
 
-////    public static TreeMap<String,TreeMap<String,String>> llTablazat =new TreeMap<>();
     public static TreeMap<String,TreeMap<String,SzamozottJobboldal>> llTablazat =new TreeMap<>();
+
+    public static TreeMap<Integer,TreeMap<String,HashSet<String>>> hTablazat = new TreeMap<>();
 
     public static TreeMap<String, ArrayList<HashSet<String>>> first1_map = new TreeMap<>();
 
@@ -153,37 +154,172 @@ public class LL1egyszeruTablazattal {
 
             first1_map.put(nonTerminal, hGroups);
         }
-
-        System.out.println(first1_map);
-
-        var result = getFirst("ABC", 0, new HashSet<>());
-        System.out.println(result);
-
-        for (String nonTerminal
-                : nonTerminals ) {
-            TreeMap<String, SzamozottJobboldal> newRow = new TreeMap<>();
-            ArrayList<HashSet<String>> first1Row = first1_map.get(nonTerminal);
-
-            for (String terminal
-                    : terminals) {
-
-                for (int i = 0; i < first1Row.size(); i++) {
-                    HashSet<String> hGroup = first1Row.get(i);
-
-                    if (hGroup.contains(terminal)) {
-                        newRow.put(terminal, szamozottGrammar.get(nonTerminal).get(i));
-                        break;
-                    }
-                }
-
-            }
-            llTablazat.put(nonTerminal, newRow);
+        ArrayList<String> tempTerminals = new ArrayList<>(terminals);
+        tempTerminals.add("#");
+        for (String terminal :
+                tempTerminals) {
+            ArrayList<HashSet<String>> tempTerminalValue = new ArrayList<>();
+            tempTerminalValue.add(new HashSet<>(Collections.singletonList(terminal)));
+            first1_map.put(terminal, tempTerminalValue);
         }
 
-        System.out.println(llTablazat);
+        System.out.println("------------------");
+        System.out.println("FIRST1 MAP");
+        for (String key:
+                nonTerminals) {
+            System.out.printf("%s = %s\n",key, first1_map.get(key));
+        }
+        System.out.println("------------------");
+
+
+        // Construct FOLLOW1
+        TreeMap<String,HashSet<String>> follow1 = constructFollow1();
+
+        System.out.println("------------------");
+        System.out.println("FOLLOW1 MAP");
+        for (String key:
+                nonTerminals) {
+            System.out.printf("%s = %s\n",key, follow1.get(key));
+        }
+        System.out.println("------------------");
+
+        // Build LL Table
+        ArrayList<String> terminalSymbols = new ArrayList<>(terminals);
+        terminalSymbols.add("#");
+        for (String nonTerminal :
+                nonTerminals) {
+            llTablazat.put(nonTerminal, new TreeMap<>());
+            for (String terminal:
+                    terminalSymbols) {
+                llTablazat.get(nonTerminal).put(terminal, new SzamozottJobboldal("hiba", -1));
+            }
+        }
+
+        for (String nonTerminal :
+                nonTerminals) {
+            for (String terminal:
+                    terminalSymbols) {
+
+                for (SzamozottJobboldal szabaly :
+                        szamozottGrammar.get(nonTerminal)) {
+                    HashSet<String> getFirstAlfa = getFirst(szabaly.getL(), 0, new HashSet<>());
+                    if (getFirstAlfa.contains(terminal)
+                            ||(getFirstAlfa.contains(deleteSymbol)
+                            && follow1.get(nonTerminal).contains(terminal))) {
+                        if (llTablazat.get(nonTerminal).get(terminal).getL() == "hiba")
+                        {
+                            llTablazat.get(nonTerminal).put(terminal,
+                                    new SzamozottJobboldal(szabaly.getL().replace("lambda", ""), szabaly.getR()));
+                        }
+                        else {
+                            System.out.println("Nem LL(1) grammatika!");
+                            System.exit(-1);
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println("------------------");
+        System.out.println("LL MAP");
+        for (String ntKey:
+                nonTerminals) {
+            System.out.printf("%s = ",ntKey);
+            for (String tKey :
+                    terminalSymbols) {
+                System.out.printf("%s: %s\t", tKey, llTablazat.get(ntKey).get(tKey));
+            }
+            System.out.print("\n");
+        }
+        System.out.println("------------------");
+
+    }
+
+    private static TreeMap<String, HashSet<String>> constructFollow1() {
+
+        // SETUP H TABLE
+        hTablazat.put(0, new TreeMap<>());
+
+        for (String terminal :
+                terminals) {
+            hTablazat.get(0).put(terminal, new HashSet<>());
+            hTablazat.get(0).get(terminal).add(terminal);
+        }
+
+        for (String nonTerminals:
+                nonTerminals) {
+            hTablazat.get(0).put(nonTerminals, new HashSet<>());
+        }
+
+        hTablazat.get(0).get(startingSymbol).add("#");
+
+        int i = 1;
+        boolean kesz = false;
+
+        // BUILD H TABLE
+
+        while (!kesz) {
+            hTablazat.put(i, new TreeMap<>());
+            for (String terminal :
+                    terminals) {
+                hTablazat.get(i).put(terminal, new HashSet<>());
+                hTablazat.get(i).get(terminal).add(terminal);
+            }
+
+            for (String nt1 :
+                    nonTerminals) {
+                hTablazat.get(i).put(nt1, new HashSet<>());
+                hTablazat.get(i).get(nt1).addAll(
+                        hTablazat.get(i-1).get(nt1)
+                );
+
+                for (String nt2 :
+                        nonTerminals) {
+
+                    for (SzamozottJobboldal alfa :
+                            szamozottGrammar.get(nt2)) {
+                        int j;
+                        if (!alfa.getL().isBlank()) {
+                            j = alfa.getL().indexOf(nt1);
+                        }
+                        else {
+                            j = -1;
+                        }
+
+                        String alfaString = alfa.getL();
+                        while (j != -1) {
+                            String beta = alfaString.substring(j+1);
+                            HashSet<String> bSymbols = hTablazat.get(i-1).get(nt2);
+                            if (bSymbols.contains(deleteSymbol))
+                                bSymbols.add("");
+
+                            for (String b :
+                                    bSymbols) {
+                                hTablazat.get(i).get(nt1).addAll(
+                                        getFirst(beta.concat(b), 0, new HashSet<>())
+                                );
+                            }
+
+                            alfaString = beta;
+                            j = alfaString.indexOf(nt1);
+                        }
+                    }
+                }
+            }
+            if (hTablazat.get(i).equals(hTablazat.get(i-1)))
+                kesz = true;
+            else
+                i++;
+        }
+        return hTablazat.get(i);
     }
 
     private static HashSet<String> calculateHGroups(String rule, HashSet<String> hGroupResult) {
+        if (rule.equals("lambda")) {
+            hGroupResult.add(deleteSymbol);
+            return hGroupResult;
+        }
+
         String firstCharacter = String.valueOf(rule.charAt(0));
 
         if (terminals.contains(firstCharacter)) {
@@ -200,6 +336,7 @@ public class LL1egyszeruTablazattal {
     }
 
     private static HashSet<String> getFirst(String word, int index, HashSet<String> set) {
+        word = word.replace("lambda", deleteSymbol);
         if (index >= word.length()) {
             set.add(deleteSymbol);
             return set;

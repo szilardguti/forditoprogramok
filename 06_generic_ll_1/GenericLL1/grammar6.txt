@@ -1,0 +1,8 @@
+S
+a + * ( )
+S E T U F
+S TE
+E +TE lambda
+T FU
+U *FU lambda
+F (S) a
